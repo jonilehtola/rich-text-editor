@@ -4,12 +4,10 @@ logs
 results
 npm-debug.log
 node_modules
+package-lock.json
 
 ## Sass
 .sass-cache
-
-## Bower
-app/assets/components
 
 ## OS X
 .DS_Store
@@ -28,4 +26,6 @@ $RECYCLE.BIN/
 
 .idea
 target
-bower_components
+dist/
+*~
+*.swp

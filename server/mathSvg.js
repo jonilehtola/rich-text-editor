@@ -1,27 +1,10 @@
 const mjAPI = require('mathjax-node')
+const MAX_NESTING_LEVEL = 20
+const MAX_LENGTH = 5000
+const nestedContextStartedRegexes = ['\\left', '{', '\\begin']
+const nestedContextEndingRegexes = ['\\right', '}', '\\end']
 
-module.exports = {mathSvgResponse, latexToSvg}
-
-mjAPI.config({MathJax: {}})
-mjAPI.start()
-
-function mathSvgResponse(req, res) {
-    res.type('svg')
-    const latex = req.query.latex
-    latexToSvg(latex, svg => res.send(svg))
-}
-
-function latexToSvg(latex, cb) {
-    mjAPI.typeset({
-        math: latex,
-        format: 'TeX', // "inline-TeX", "MathML"
-        mml: false,
-        svg: true,
-        linebreaks: true,
-        width: 100
-    }, function (data) {
-        if (data.errors) {
-            cb(`<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+const errorResponse = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="17px" height="15px" viewBox="0 0 17 15" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <title>Group 2</title>
     <defs></defs>
@@ -37,9 +20,65 @@ function latexToSvg(latex, cb) {
             </g>
         </g>
     </g>
-</svg>`)
-        } else {
-            cb(data.svg)
+</svg>`
+
+module.exports = { mathSvgResponse, latexToSvg }
+
+mjAPI.config({
+    extensions: 'TeX/mhchem.js',
+    MathJax: {
+        SVG: {
+            font: 'Latin-Modern'
         }
-    })
+    }
+})
+mjAPI.start()
+
+function mathSvgResponse(req, res) {
+    res.type('svg')
+    const latex = req.query.latex
+    latexToSvg(latex, svg => res.send(svg))
+}
+
+function latexIsTooLong(latex) {
+    return latex && latex.length > MAX_LENGTH
+}
+
+function nestingIsTooDeep(latex) {
+    let nestingLevel = 0
+    const matches = latex.match(/\\right|\\left|\\begin|\\end|\{|\}/g)
+    if (!matches) {
+        return false
+    }
+    for (var matchedString of matches) {
+        if (nestedContextStartedRegexes.some(startingRegex => startingRegex === matchedString)) nestingLevel++
+        else if (nestedContextEndingRegexes.some(endingRegex => endingRegex === matchedString)) nestingLevel--
+        if (nestingLevel > MAX_NESTING_LEVEL) return true
+    }
+    return false
+}
+
+function latexToSvg(latex, cb) {
+    if (latexIsTooLong(latex) || nestingIsTooDeep(latex)) {
+        cb(errorResponse)
+        return
+    }
+
+    mjAPI.typeset(
+        {
+            math: latex,
+            format: 'TeX', // "inline-TeX", "MathML"
+            mml: false,
+            svg: true,
+            linebreaks: true,
+            width: 100
+        },
+        function(data) {
+            if (data.errors) {
+                cb(errorResponse)
+            } else {
+                cb(data.svg)
+            }
+        }
+    )
 }
